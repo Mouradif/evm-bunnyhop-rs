@@ -29,8 +29,8 @@ impl Op {
         let value = u32::from_be_bytes(be_bytes) - 1;
         let new_bytes = value.to_be_bytes();
         let mut new_input: Vec<u8> = vec![];
-        for i in start..4 {
-            new_input.push(new_bytes[i]);
+        for item in new_bytes.iter().skip(start) {
+            new_input.push(*item);
         }
 
         self.input = new_input;
@@ -244,7 +244,7 @@ fn assemble_operation(op: Op) -> Vec<u8> {
 }
 
 pub fn bunny_hop(bytecode_string: &str) -> String {
-        disassemble_str(bytecode_string).expect("Failed to disassemble input string");
+    disassemble_str(bytecode_string).expect("Failed to disassemble input string");
     let mut ops: Vec<Op> = disassemble_str(bytecode_string)
         .expect("Failed to disassemble input string")
         .iter()
@@ -271,8 +271,7 @@ pub fn bunny_hop(bytecode_string: &str) -> String {
             break;
         }
         let index = target_index.unwrap();
-        let jump2_operation = ops.get_mut(index).unwrap();
-        jump2_operation.demote_push();
+        ops.get_mut(index).unwrap().demote_push();
 
         let mut decremented_jumpdests: Vec<u32> = vec![];
         for i in (index + 2)..ops.len() {
@@ -285,24 +284,26 @@ pub fn bunny_hop(bytecode_string: &str) -> String {
             ops.get_mut(i).unwrap().decrement_offset();
         }
 
-        if decremented_jumpdests.len() > 0 {
-            for i in 0..(ops.len() - 1) {
-                {
-                    let next_op = ops.get(i + 1).unwrap();
-                    if !next_op.is_jump() {
-                        continue;
-                    }
-                }
-                let op = ops.get_mut(i).unwrap();
-                if op.opcode == Opcode::PUSH1 || op.opcode == Opcode::PUSH2 {
-                    if decremented_jumpdests.contains(&op.get_input_value()) {
-                        op.decrement_input();
-                    }
-                }
-            }
+        target_index = None;
+
+        if decremented_jumpdests.is_empty() {
+            continue;
         }
 
-        target_index = None;
+        for i in 0..(ops.len() - 1) {
+            {
+                let next_op = ops.get(i + 1).unwrap();
+                if !next_op.is_jump() {
+                    continue;
+                }
+            }
+            let op = ops.get_mut(i).unwrap();
+            if (op.opcode == Opcode::PUSH1 || op.opcode == Opcode::PUSH2)
+                && decremented_jumpdests.contains(&op.get_input_value())
+            {
+                op.decrement_input();
+            }
+        }
     }
     let mut output = String::new();
     for op in ops {
